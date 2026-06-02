@@ -5,7 +5,6 @@ import boto3
 from botocore.client import Config
 from mcp.server.fastmcp import FastMCP
 
-# ── Config ─────────────────────────────────────────────────────────────────
 API_KEY         = os.environ["MCP_API_KEY"]
 TGS3_ENDPOINT   = os.environ["TGS3_ENDPOINT"]
 TGS3_ACCESS_KEY = os.environ["TGS3_ACCESS_KEY"]
@@ -13,7 +12,6 @@ TGS3_SECRET_KEY = os.environ["TGS3_SECRET_KEY"]
 TGS3_BUCKET     = os.environ.get("TGS3_BUCKET", "hermes-storage")
 PORT            = int(os.environ.get("PORT", 8000))
 
-# ── S3 client ──────────────────────────────────────────────────────────────
 s3 = boto3.client(
     "s3",
     endpoint_url=TGS3_ENDPOINT,
@@ -23,11 +21,9 @@ s3 = boto3.client(
     config=Config(signature_version="s3v4"),
 )
 
-# ── MCP Server ─────────────────────────────────────────────────────────────
-mcp = FastMCP("Hermes Tools")
+mcp = FastMCP("Hermes Tools", host="0.0.0.0", port=PORT)
 
 
-# ── Storage tools ──────────────────────────────────────────────────────────
 @mcp.tool()
 def storage_read(key: str) -> str:
     """Read a file from TG-S3 storage. Returns file contents as string."""
@@ -69,7 +65,6 @@ def storage_delete(key: str) -> str:
         return f"ERROR: {e}"
 
 
-# ── HTTP tools ─────────────────────────────────────────────────────────────
 @mcp.tool()
 def http_get(url: str, headers: str = "{}") -> str:
     """Make an HTTP GET request. headers is a JSON string."""
@@ -101,7 +96,6 @@ def http_post(url: str, body: str, headers: str = "{}") -> str:
         return f"ERROR: {e}"
 
 
-# ── Utility tools ──────────────────────────────────────────────────────────
 @mcp.tool()
 def json_query(data: str, key_path: str) -> str:
     """Query a JSON string with a dot-separated key path. e.g. 'results.0.name'"""
@@ -124,7 +118,5 @@ def health() -> str:
     return json.dumps({"status": "ok", "tools": 7})
 
 
-# ── Run ────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    mcp.run(transport="sse", host="0.0.0.0", port=PORT)
-
+    mcp.run(transport="sse")
