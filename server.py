@@ -42,12 +42,7 @@ def storage_write(key: str, content: str) -> str:
     """Write a string to TG-S3 storage."""
     try:
         data = content.encode("utf-8")
-        s3.put_object(
-            Bucket=TGS3_BUCKET,
-            Key=key,
-            Body=data,
-            ContentLength=len(data),
-        )
+        s3.put_object(Bucket=TGS3_BUCKET, Key=key, Body=data)
         return f"OK: written to {key}"
     except Exception as e:
         return f"ERROR: {e}"
@@ -119,8 +114,6 @@ def json_query(data: str, key_path: str) -> str:
 def health() -> str:
     """Check if the MCP tool server is alive."""
     return json.dumps({"status": "ok", "tools": 7})
-
-# ── HTTP health endpoint (BetterStack / Render) ─────────────────────────────
 
 @mcp.custom_route("/health", methods=["GET"])
 async def health_http(request: Request) -> JSONResponse:
