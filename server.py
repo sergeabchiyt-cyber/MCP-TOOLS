@@ -1,8 +1,9 @@
 import os
 import json
+import io
+import urllib.parse
 import httpx
-import boto3
-from botocore.client import Config
+from minio import Minio
 from mcp.server.fastmcp import FastMCP
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -14,19 +15,12 @@ TGS3_SECRET_KEY = os.environ["TGS3_SECRET_KEY"]
 TGS3_BUCKET = os.environ.get("TGS3_BUCKET", "hermes-storage")
 PORT = int(os.environ.get("PORT", 8000))
 
-s3 = boto3.client(
-    "s3",
-    endpoint_url=TGS3_ENDPOINT,
-    aws_access_key_id=TGS3_ACCESS_KEY,
-    aws_secret_access_key=TGS3_SECRET_KEY,
-    region_name="us-east-1",
-    config=Config(
-        signature_version="s3v4",
-        s3={
-            "addressing_style": "path",
-            "payload_signing_enabled": False,
-        },
-    ),
+_parsed = urllib.parse.urlparse(TGS3_ENDPOINT)
+s3 = Minio(
+    _parsed.netloc,
+    access_key=TGS3_ACCESS_KEY,
+    secret_key=TGS3_SECRET_KEY,
+    secure=(_parsed.scheme == "https"),
 )
 
 mcp = FastMCP("Hermes Tools", host="0.0.0.0", port=PORT)
@@ -35,8 +29,8 @@ mcp = FastMCP("Hermes Tools", host="0.0.0.0", port=PORT)
 def storage_read(key: str) -> str:
     """Read a file from TG-S3 storage. Returns file contents as string."""
     try:
-        response = s3.get_object(Bucket=TGS3_BUCKET, Key=key)
-        return response["Body"].read().decode("utf-8")
+        response = s3.get_object(TGS3_BUCKET, key)
+        return response.read().decode("utf-8")
     except Exception as e:
         return f"ERROR: {e}"
 
@@ -45,7 +39,7 @@ def storage_write(key: str, content: str) -> str:
     """Write a string to TG-S3 storage."""
     try:
         data = content.encode("utf-8")
-        s3.put_object(Bucket=TGS3_BUCKET, Key=key, Body=data)
+        s3.put_object(TGS3_BUCKET, key, io.BytesIO(data), length=len(data))
         return f"OK: written to {key}"
     except Exception as e:
         return f"ERROR: {e}"
@@ -54,9 +48,8 @@ def storage_write(key: str, content: str) -> str:
 def storage_list(prefix: str = "") -> str:
     """List files in TG-S3 storage under a given prefix."""
     try:
-        response = s3.list_objects_v2(Bucket=TGS3_BUCKET, Prefix=prefix)
-        files = [obj["Key"] for obj in response.get("Contents", [])]
-        return json.dumps(files)
+        objects = s3.list_objects(TGS3_BUCKET, prefix=prefix)
+        return json.dumps([obj.object_name for obj in objects])
     except Exception as e:
         return f"ERROR: {e}"
 
@@ -64,7 +57,7 @@ def storage_list(prefix: str = "") -> str:
 def storage_delete(key: str) -> str:
     """Delete a file from TG-S3 storage."""
     try:
-        s3.delete_object(Bucket=TGS3_BUCKET, Key=key)
+        s3.remove_object(TGS3_BUCKET, key)
         return f"OK: deleted {key}"
     except Exception as e:
         return f"ERROR: {e}"
