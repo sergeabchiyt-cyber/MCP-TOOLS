@@ -4,13 +4,15 @@ import httpx
 import boto3
 from botocore.client import Config
 from mcp.server.fastmcp import FastMCP
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
-API_KEY         = os.environ["MCP_API_KEY"]
-TGS3_ENDPOINT   = os.environ["TGS3_ENDPOINT"]
+API_KEY = os.environ["MCP_API_KEY"]
+TGS3_ENDPOINT = os.environ["TGS3_ENDPOINT"]
 TGS3_ACCESS_KEY = os.environ["TGS3_ACCESS_KEY"]
 TGS3_SECRET_KEY = os.environ["TGS3_SECRET_KEY"]
-TGS3_BUCKET     = os.environ.get("TGS3_BUCKET", "hermes-storage")
-PORT            = int(os.environ.get("PORT", 8000))
+TGS3_BUCKET = os.environ.get("TGS3_BUCKET", "hermes-storage")
+PORT = int(os.environ.get("PORT", 8000))
 
 s3 = boto3.client(
     "s3",
@@ -18,11 +20,13 @@ s3 = boto3.client(
     aws_access_key_id=TGS3_ACCESS_KEY,
     aws_secret_access_key=TGS3_SECRET_KEY,
     region_name="us-east-1",
-    config=Config(signature_version="s3v4"),
+    config=Config(
+        signature_version="s3v4",
+        s3={"addressing_style": "path"},
+    ),
 )
 
 mcp = FastMCP("Hermes Tools", host="0.0.0.0", port=PORT)
-
 
 @mcp.tool()
 def storage_read(key: str) -> str:
@@ -33,16 +37,20 @@ def storage_read(key: str) -> str:
     except Exception as e:
         return f"ERROR: {e}"
 
-
 @mcp.tool()
 def storage_write(key: str, content: str) -> str:
     """Write a string to TG-S3 storage."""
     try:
-        s3.put_object(Bucket=TGS3_BUCKET, Key=key, Body=content.encode("utf-8"))
+        data = content.encode("utf-8")
+        s3.put_object(
+            Bucket=TGS3_BUCKET,
+            Key=key,
+            Body=data,
+            ContentLength=len(data),
+        )
         return f"OK: written to {key}"
     except Exception as e:
         return f"ERROR: {e}"
-
 
 @mcp.tool()
 def storage_list(prefix: str = "") -> str:
@@ -54,7 +62,6 @@ def storage_list(prefix: str = "") -> str:
     except Exception as e:
         return f"ERROR: {e}"
 
-
 @mcp.tool()
 def storage_delete(key: str) -> str:
     """Delete a file from TG-S3 storage."""
@@ -63,7 +70,6 @@ def storage_delete(key: str) -> str:
         return f"OK: deleted {key}"
     except Exception as e:
         return f"ERROR: {e}"
-
 
 @mcp.tool()
 def http_get(url: str, headers: str = "{}") -> str:
@@ -78,7 +84,6 @@ def http_get(url: str, headers: str = "{}") -> str:
             })
     except Exception as e:
         return f"ERROR: {e}"
-
 
 @mcp.tool()
 def http_post(url: str, body: str, headers: str = "{}") -> str:
@@ -95,7 +100,6 @@ def http_post(url: str, body: str, headers: str = "{}") -> str:
     except Exception as e:
         return f"ERROR: {e}"
 
-
 @mcp.tool()
 def json_query(data: str, key_path: str) -> str:
     """Query a JSON string with a dot-separated key path. e.g. 'results.0.name'"""
@@ -111,12 +115,16 @@ def json_query(data: str, key_path: str) -> str:
     except Exception as e:
         return f"ERROR: {e}"
 
-
 @mcp.tool()
 def health() -> str:
     """Check if the MCP tool server is alive."""
     return json.dumps({"status": "ok", "tools": 7})
 
+# ── HTTP health endpoint (BetterStack / Render) ─────────────────────────────
+
+@mcp.custom_route("/health", methods=["GET"])
+async def health_http(request: Request) -> JSONResponse:
+    return JSONResponse({"status": "ok", "tools": 7})
 
 if __name__ == "__main__":
     mcp.run(transport="streamable-http")
