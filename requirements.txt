@@ -1,5 +1,5 @@
 mcp[cli]
 fastmcp
 httpx
-boto3
+minio
 botocore
